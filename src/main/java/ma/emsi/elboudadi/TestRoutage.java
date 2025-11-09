@@ -9,16 +9,21 @@ import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
-import dev.langchain4j.rag.query.Query;
-import dev.langchain4j.rag.query.router.QueryRouter;
+import dev.langchain4j.rag.content.retriever.WebSearchContentRetriever;
+import dev.langchain4j.rag.query.router.DefaultQueryRouter;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
+import dev.langchain4j.web.search.WebSearchEngine;
+import dev.langchain4j.web.search.tavily.TavilyWebSearchEngine;
+import dev.langchain4j.rag.content.retriever.WebSearchContentRetriever;
+
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Scanner;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -40,22 +45,22 @@ public class TestRoutage {
     public static void main(String[] args) throws Exception {
         configureLogger();
 
-        // === 1. API Key ===
-        String apiKey = System.getenv("GEMINI-API-KEY");
-        if (apiKey == null) {
-            System.err.println("⚠️ Définissez la variable d'environnement GEMINI_API_KEY");
+        // === 1. API Key for Gemini ===
+        String geminiApiKey = System.getenv("GEMINI-API-KEY");
+        if (geminiApiKey == null) {
+            System.err.println("⚠️ Define environment variable GEMINI_API_KEY");
             return;
         }
 
-        // === 2. Modèle Gemini ===
+        // === 2. Gemini ChatModel ===
         ChatModel model = GoogleAiGeminiChatModel.builder()
-                .apiKey(apiKey)
+                .apiKey(geminiApiKey)
                 .modelName("gemini-2.5-flash")
                 .temperature(0.1)
                 .logRequestsAndResponses(true)
                 .build();
 
-        // === 3. Charger deux documents ===
+        // === 3. Load documents ===
         Path docAPath = Paths.get("docs/RAG.pdf");
         Path docBPath = Paths.get("docs/LangChain4j.pdf");
 
@@ -66,75 +71,58 @@ public class TestRoutage {
         EmbeddingStore<TextSegment> embeddingStoreA = new InMemoryEmbeddingStore<>();
         EmbeddingStore<TextSegment> embeddingStoreB = new InMemoryEmbeddingStore<>();
 
-        // === 5. Ingestion ===
+        // === 5. Ingest documents into embedding stores ===
         EmbeddingStoreIngestor.ingest(docA, embeddingStoreA);
         EmbeddingStoreIngestor.ingest(docB, embeddingStoreB);
 
-        // === 6. Content retrievers ===
+        // === 6. Content retrievers for documents ===
         ContentRetriever retrieverA = EmbeddingStoreContentRetriever.from(embeddingStoreA);
         ContentRetriever retrieverB = EmbeddingStoreContentRetriever.from(embeddingStoreB);
 
-        // === 7. Query Router personnalisé (No RAG) ===
-        QueryRouter router = new NoRagQueryRouter(model, retrieverA, retrieverB);
+        // === 7. Tavily web search setup ===
+        String tavilyApiKey = System.getenv("TAVILY_KEY");
+        if (tavilyApiKey == null) {
+            System.err.println("⚠️ Define environment variable TAVILY_KEY");
+            return;
+        }
 
-        // === 8. Retrieval Augmentor ===
+        WebSearchEngine webSearchEngine = TavilyWebSearchEngine.builder()
+                .apiKey(tavilyApiKey)
+                .build();
+
+        ContentRetriever webRetriever = WebSearchContentRetriever.builder()
+                .webSearchEngine(webSearchEngine)
+                .maxResults(3)     // use maxResults instead of topK
+                .build();
+
+        // === 8. Default QueryRouter combining docs + web search ===
+        DefaultQueryRouter router = new DefaultQueryRouter(retrieverA, retrieverB, webRetriever);
+
+        // === 9. RetrievalAugmentor ===
         DefaultRetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
                 .queryRouter(router)
                 .build();
 
-        // === 9. Assistant ===
+        // === 10. Assistant with retrieval augmentor ===
         Assistant assistant = AiServices.builder(Assistant.class)
                 .chatModel(model)
                 .retrievalAugmentor(retrievalAugmentor)
                 .chatMemory(MessageWindowChatMemory.withMaxMessages(10))
                 .build();
 
-        // === 10. Console interactive ===
+        // === 11. Interactive console ===
         Scanner scanner = new Scanner(System.in);
-        System.out.println("=== Test No RAG Router - Tapez 'exit' pour quitter ===");
+        System.out.println("=== Test RAG + Web Search (Tavily) – type 'exit' to quit ===");
+
         while (true) {
-            System.out.print("\nVotre question : ");
+            System.out.print("\nYour question: ");
             String question = scanner.nextLine();
-            if (question.equalsIgnoreCase("exit")) break;
+            if ("exit".equalsIgnoreCase(question)) break;
 
-            String reponse = assistant.chat(question);
-            System.out.println("→ Réponse : " + reponse);
-        }
-    }
-
-    // =====================================================
-    // Inner class NoRagQueryRouter
-    // =====================================================
-    static class NoRagQueryRouter implements QueryRouter {
-
-        private final ChatModel model;
-        private final ContentRetriever retrieverA;
-        private final ContentRetriever retrieverB;
-
-        public NoRagQueryRouter(ChatModel model, ContentRetriever retrieverA, ContentRetriever retrieverB) {
-            this.model = model;
-            this.retrieverA = retrieverA;
-            this.retrieverB = retrieverB;
+            String response = assistant.chat(question);
+            System.out.println("→ Response: " + response);
         }
 
-        @Override
-        public List<ContentRetriever> route(Query query) {
-            String question = query.text();
-
-            String prompt = "La question concerne-t-elle l'intelligence artificielle ? " +
-                    "Réponds uniquement par 'oui', 'non' ou 'peut-être'.\nQuestion : " + question;
-
-            String answer = model.chat(prompt).toLowerCase(Locale.ROOT);
-
-            System.out.println("🔍 Réponse du routeur : " + answer);
-
-            if (answer.contains("non")) {
-                System.out.println("➡ Pas de RAG (réponse directe du modèle).");
-                return Collections.emptyList();
-            } else {
-                System.out.println("➡ Utilisation du RAG (Doc A + Doc B).");
-                return Arrays.asList(retrieverA, retrieverB);
-            }
-        }
+        scanner.close();
     }
 }
