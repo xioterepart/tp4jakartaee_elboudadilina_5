@@ -18,7 +18,7 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>1.8.0</version>
+            <version>1.8.0</version> <!-- core -->
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
@@ -31,8 +31,8 @@
             <version>1.8.0-beta15</version>
         </dependency>
         <dependency>
-        <groupId>dev.langchain4j</groupId>
-        <artifactId>langchain4j-embeddings</artifactId>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings</artifactId>
             <version>1.8.0-beta15</version>
         </dependency>
         <dependency>
@@ -46,4 +46,5 @@
             <version>2.0.17</version>
         </dependency>
     </dependencies>
+
 </project>
