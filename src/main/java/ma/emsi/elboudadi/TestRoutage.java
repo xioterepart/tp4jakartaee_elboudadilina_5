@@ -9,7 +9,7 @@ import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
-import dev.langchain4j.rag.query.router.LanguageModelQueryRouter;
+import dev.langchain4j.rag.query.Query;
 import dev.langchain4j.rag.query.router.QueryRouter;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
@@ -18,9 +18,7 @@ import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -76,15 +74,8 @@ public class TestRoutage {
         ContentRetriever retrieverA = EmbeddingStoreContentRetriever.from(embeddingStoreA);
         ContentRetriever retrieverB = EmbeddingStoreContentRetriever.from(embeddingStoreB);
 
-        Map<ContentRetriever, String> retrieverMap = new HashMap<>();
-        retrieverMap.put(retrieverA, "Doc A : RAG et Intelligence Artificielle");
-        retrieverMap.put(retrieverB, "Doc B : LangChain4j");
-
-        // === 7. Query Router (new builder syntax) ===
-        QueryRouter router = LanguageModelQueryRouter.builder()
-                .chatModel(model)
-                .retrieverToDescription(retrieverMap)  // ← use this method
-                .build();
+        // === 7. Query Router personnalisé (No RAG) ===
+        QueryRouter router = new NoRagQueryRouter(model, retrieverA, retrieverB);
 
         // === 8. Retrieval Augmentor ===
         DefaultRetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
@@ -100,7 +91,7 @@ public class TestRoutage {
 
         // === 10. Console interactive ===
         Scanner scanner = new Scanner(System.in);
-        System.out.println("=== Test Routage - Tapez 'exit' pour quitter ===");
+        System.out.println("=== Test No RAG Router - Tapez 'exit' pour quitter ===");
         while (true) {
             System.out.print("\nVotre question : ");
             String question = scanner.nextLine();
@@ -108,6 +99,42 @@ public class TestRoutage {
 
             String reponse = assistant.chat(question);
             System.out.println("→ Réponse : " + reponse);
+        }
+    }
+
+    // =====================================================
+    // Inner class NoRagQueryRouter
+    // =====================================================
+    static class NoRagQueryRouter implements QueryRouter {
+
+        private final ChatModel model;
+        private final ContentRetriever retrieverA;
+        private final ContentRetriever retrieverB;
+
+        public NoRagQueryRouter(ChatModel model, ContentRetriever retrieverA, ContentRetriever retrieverB) {
+            this.model = model;
+            this.retrieverA = retrieverA;
+            this.retrieverB = retrieverB;
+        }
+
+        @Override
+        public List<ContentRetriever> route(Query query) {
+            String question = query.text();
+
+            String prompt = "La question concerne-t-elle l'intelligence artificielle ? " +
+                    "Réponds uniquement par 'oui', 'non' ou 'peut-être'.\nQuestion : " + question;
+
+            String answer = model.chat(prompt).toLowerCase(Locale.ROOT);
+
+            System.out.println("🔍 Réponse du routeur : " + answer);
+
+            if (answer.contains("non")) {
+                System.out.println("➡ Pas de RAG (réponse directe du modèle).");
+                return Collections.emptyList();
+            } else {
+                System.out.println("➡ Utilisation du RAG (Doc A + Doc B).");
+                return Arrays.asList(retrieverA, retrieverB);
+            }
         }
     }
 }
