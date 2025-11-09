@@ -15,15 +15,32 @@ import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Scanner;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class RagNaif {
 
-    // Interface Assistant, implémentée automatiquement par LangChain4j
+    // === Interface Assistant implémentée automatiquement par LangChain4j ===
     interface Assistant {
         String chat(String userMessage);
     }
 
+    // === Configuration du logger pour LangChain4j ===
+    private static void configureLogger() {
+        Logger packageLogger = Logger.getLogger("dev.langchain4j");
+        packageLogger.setLevel(Level.FINE);
+
+        ConsoleHandler handler = new ConsoleHandler();
+        handler.setLevel(Level.FINE);
+
+        packageLogger.addHandler(handler);
+    }
+
     public static void main(String[] args) throws Exception {
+
+        // === Étape 0 : Activation du logging ===
+        configureLogger();
 
         // === Étape 1 : Configuration de l'API ===
         String llmKey = System.getenv("GEMINI-API-KEY");
@@ -37,6 +54,7 @@ public class RagNaif {
                 .apiKey(llmKey)
                 .modelName("gemini-2.5-flash")
                 .temperature(0.1)
+                .logRequestsAndResponses(true)
                 .build();
 
         // === Étape 3 : Chargement du document à indexer ===
@@ -47,7 +65,6 @@ public class RagNaif {
         EmbeddingStore<TextSegment> embeddingStore = new InMemoryEmbeddingStore<>();
 
         // === Étape 5 : Calcul des embeddings et ingestion ===
-        // Utilise automatiquement le modèle d’embedding par défaut
         EmbeddingStoreIngestor.ingest(document, embeddingStore);
 
         // === Étape 6 : Création du récupérateur de contenu (retriever) ===
