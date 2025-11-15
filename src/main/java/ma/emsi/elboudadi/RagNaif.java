@@ -19,14 +19,31 @@ import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * Test 1 - RAG Naïf
+ * 
+ * Implémentation de base du RAG (Retrieval-Augmented Generation) avec décomposition
+ * explicite de toutes les étapes :
+ * 
+ * Phase 1 - Ingestion :
+ * - Chargement du document PDF
+ * - Découpage en segments (chunks)
+ * - Création des embeddings
+ * - Stockage dans un magasin vectoriel en mémoire
+ * 
+ * Phase 2 - Récupération et génération :
+ * - Création d'un ContentRetriever
+ * - Configuration de l'assistant avec mémoire
+ * - Interaction en mode console
+ */
 public class RagNaif {
 
-    // === Interface Assistant implémentée automatiquement par LangChain4j ===
-    interface Assistant {
-        String chat(String userMessage);
-    }
+    // Utilise l'interface Assistant commune définie dans Assistant.java
 
-    // === Configuration du logger pour LangChain4j ===
+    /**
+     * Configure le logger pour afficher les détails des requêtes/réponses
+     * envoyées à l'API du modèle de langage.
+     */
     private static void configureLogger() {
         Logger packageLogger = Logger.getLogger("dev.langchain4j");
         packageLogger.setLevel(Level.FINE);
